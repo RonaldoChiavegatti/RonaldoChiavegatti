@@ -45,6 +45,13 @@ class User(UserBase):
     model_config = ConfigDict(from_attributes=True)
 
 
+class UserProfile(BaseModel):
+    email: EmailStr
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 # =============================================================================
 # Token Models (Auth Service)
 # =============================================================================

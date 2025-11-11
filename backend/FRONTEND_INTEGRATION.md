@@ -59,6 +59,7 @@ Abaixo estão os principais endpoints que você pode consumir a partir do seu fr
 
 - `POST /auth/register`: Registra um novo usuário.
 - `POST /auth/login`: Autentica um usuário e retorna um token.
+- `GET /auth/profile`: Retorna o e-mail e a data de cadastro do usuário autenticado. **(Requer autenticação)**
 
 ### Serviço de Agentes (`/chat`)
 

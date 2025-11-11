@@ -55,7 +55,27 @@ Autentica um usuário e retorna um token de acesso.
   ```
 
 - **Possíveis Erros:**
-  - `401 UNAUTHORIZED`: Credenciais inválidas.
+- `401 UNAUTHORIZED`: Credenciais inválidas.
+- `500 INTERNAL SERVER ERROR`: Erro interno no servidor.
+
+### `GET /profile`
+
+Retorna os dados básicos do usuário autenticado.
+
+- **Headers:**
+  - `Authorization: Bearer <seu-token-jwt>`
+
+- **Response (200 OK):**
+  ```json
+  {
+    "email": "user@example.com",
+    "created_at": "2024-05-01T12:00:00Z"
+  }
+  ```
+
+- **Possíveis Erros:**
+  - `401 UNAUTHORIZED`: Token ausente ou inválido.
+  - `404 NOT FOUND`: Usuário não encontrado.
   - `500 INTERNAL SERVER ERROR`: Erro interno no servidor.
 
 ## Dependências

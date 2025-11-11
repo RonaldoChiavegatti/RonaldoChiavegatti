@@ -1,11 +1,10 @@
-from sqlalchemy import create_engine, Column, String, DateTime
-from sqlalchemy.dialects.postgresql import UUID
-from sqlalchemy.orm import sessionmaker
-from sqlalchemy.ext.declarative import declarative_base
 import uuid
 from datetime import datetime
 
 from services.auth_service.infrastructure.config import settings
+from sqlalchemy import Column, DateTime, String, create_engine
+from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy.orm import declarative_base, sessionmaker
 
 DATABASE_URL = settings.DATABASE_URL
 

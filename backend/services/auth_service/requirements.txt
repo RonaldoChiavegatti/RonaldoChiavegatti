@@ -4,6 +4,5 @@ pydantic[email]
 pydantic-settings
 SQLAlchemy
 psycopg2-binary
-passlib[bcrypt]
 python-jose[cryptography]
 python-multipart
