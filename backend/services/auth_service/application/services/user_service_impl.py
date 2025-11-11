@@ -1,19 +1,19 @@
 from pydantic import EmailStr
-
-from shared.models.base_models import User as UserResponse, Token
 from services.auth_service.application.domain.user import User as DomainUser
-from services.auth_service.application.ports.input.user_service import UserService
-from services.auth_service.application.ports.output.user_repository import (
-    UserRepository,
+from services.auth_service.application.exceptions import (
+    InvalidCredentialsError,
+    UserAlreadyExistsError,
 )
+from services.auth_service.application.ports.input.user_service import UserService
 from services.auth_service.application.ports.output.password_hasher import (
     PasswordHasher,
 )
 from services.auth_service.application.ports.output.token_provider import TokenProvider
-from services.auth_service.application.exceptions import (
-    UserAlreadyExistsError,
-    InvalidCredentialsError,
+from services.auth_service.application.ports.output.user_repository import (
+    UserRepository,
 )
+from shared.models.base_models import Token
+from shared.models.base_models import User as UserResponse
 
 
 class UserServiceImpl(UserService):
@@ -56,8 +56,7 @@ class UserServiceImpl(UserService):
 
         saved_user = self.user_repository.save(new_user)
 
-        # Pydantic v2 uses from_attributes instead of from_orm
-        return UserResponse.from_attributes(saved_user)
+        return UserResponse.model_validate(saved_user, from_attributes=True)
 
     def login(self, email: EmailStr, password: str) -> Token:
         """

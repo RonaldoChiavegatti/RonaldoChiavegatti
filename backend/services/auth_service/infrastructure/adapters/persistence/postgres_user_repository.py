@@ -1,11 +1,11 @@
 from typing import Optional
-from sqlalchemy.orm import Session
 
+from services.auth_service.application.domain.user import User as DomainUser
 from services.auth_service.application.ports.output.user_repository import (
     UserRepository,
 )
-from services.auth_service.application.domain.user import User as DomainUser
 from services.auth_service.infrastructure.database import UserModel
+from sqlalchemy.orm import Session
 
 
 class PostgresUserRepository(UserRepository):
@@ -22,8 +22,7 @@ class PostgresUserRepository(UserRepository):
         """
         user_model = self.db.query(UserModel).filter(UserModel.email == email).first()
         if user_model:
-            # Pydantic v2 uses from_attributes instead of from_orm
-            return DomainUser.from_attributes(user_model)
+            return DomainUser.model_validate(user_model, from_attributes=True)
         return None
 
     def save(self, user: DomainUser) -> DomainUser:
@@ -42,4 +41,4 @@ class PostgresUserRepository(UserRepository):
         self.db.refresh(user_model)
 
         # Return the saved data as a new domain user instance
-        return DomainUser.from_attributes(user_model)
+        return DomainUser.model_validate(user_model, from_attributes=True)

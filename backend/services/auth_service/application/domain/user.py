@@ -1,4 +1,7 @@
 import uuid
+from datetime import datetime
+from typing import Optional
+
 from pydantic import BaseModel, EmailStr, Field
 
 
@@ -13,3 +16,5 @@ class User(BaseModel):
     full_name: str
     email: EmailStr
     hashed_password: str
+    created_at: Optional[datetime] = None
+    updated_at: Optional[datetime] = None

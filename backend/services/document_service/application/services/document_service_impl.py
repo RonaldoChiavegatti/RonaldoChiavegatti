@@ -1,9 +1,12 @@
+import pathlib
 import uuid
 from typing import IO, List
-import pathlib
 
-from shared.models.base_models import DocumentJob as DocumentJobResponse
 from services.document_service.application.domain.document_job import DocumentJob
+from services.document_service.application.exceptions import (
+    JobAccessForbiddenError,
+    JobNotFoundError,
+)
 from services.document_service.application.ports.input.document_service import (
     DocumentService,
 )
@@ -14,10 +17,7 @@ from services.document_service.application.ports.output.file_storage import File
 from services.document_service.application.ports.output.message_queue import (
     MessageQueue,
 )
-from services.document_service.application.exceptions import (
-    JobNotFoundError,
-    JobAccessForbiddenError,
-)
+from shared.models.base_models import DocumentJob as DocumentJobResponse
 
 
 class DocumentServiceImpl(DocumentService):
@@ -66,7 +66,7 @@ class DocumentServiceImpl(DocumentService):
             message={"job_id": str(saved_job.id), "file_path": saved_job.file_path},
         )
 
-        return DocumentJobResponse.from_attributes(saved_job)
+        return DocumentJobResponse.model_validate(saved_job, from_attributes=True)
 
     def get_job_status(
         self, job_id: uuid.UUID, user_id: uuid.UUID
@@ -78,8 +78,11 @@ class DocumentServiceImpl(DocumentService):
         if job.user_id != user_id:
             raise JobAccessForbiddenError("User does not have access to this job.")
 
-        return DocumentJobResponse.from_attributes(job)
+        return DocumentJobResponse.model_validate(job, from_attributes=True)
 
     def get_user_jobs(self, user_id: uuid.UUID) -> List[DocumentJobResponse]:
         jobs = self.job_repository.get_by_user_id(user_id)
-        return [DocumentJobResponse.from_attributes(job) for job in jobs]
+        return [
+            DocumentJobResponse.model_validate(job, from_attributes=True)
+            for job in jobs
+        ]

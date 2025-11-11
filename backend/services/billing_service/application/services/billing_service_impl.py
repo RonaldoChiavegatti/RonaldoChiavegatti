@@ -1,22 +1,24 @@
 import uuid
-from typing import List
 from datetime import datetime
+from typing import List
 
-from shared.models.base_models import (
-    UserBalance as UserBalanceResponse,
-    Transaction as TransactionResponse,
-)
 from services.billing_service.application.domain.transaction import (
     Transaction,
     TransactionType,
 )
+from services.billing_service.application.exceptions import UserNotFoundError
 from services.billing_service.application.ports.input.billing_service import (
     BillingService,
 )
 from services.billing_service.application.ports.output.billing_repository import (
     BillingRepository,
 )
-from services.billing_service.application.exceptions import UserNotFoundError
+from shared.models.base_models import (
+    Transaction as TransactionResponse,
+)
+from shared.models.base_models import (
+    UserBalance as UserBalanceResponse,
+)
 
 
 class BillingServiceImpl(BillingService):
@@ -53,8 +55,11 @@ class BillingServiceImpl(BillingService):
         if not balance:
             raise UserNotFoundError(f"Balance for user ID {user_id} not found.")
 
-        return UserBalanceResponse.from_attributes(balance)
+        return UserBalanceResponse.model_validate(balance, from_attributes=True)
 
     def get_user_transactions(self, user_id: uuid.UUID) -> List[TransactionResponse]:
         transactions = self.billing_repository.get_user_transactions(user_id)
-        return [TransactionResponse.from_attributes(tx) for tx in transactions]
+        return [
+            TransactionResponse.model_validate(tx, from_attributes=True)
+            for tx in transactions
+        ]

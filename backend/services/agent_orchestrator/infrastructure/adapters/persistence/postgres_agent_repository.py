@@ -1,16 +1,16 @@
-from typing import List, Optional
 import uuid
-from sqlalchemy.orm import Session
+from typing import List, Optional
 
+from services.agent_orchestrator.application.domain.agent import Agent
+from services.agent_orchestrator.application.domain.knowledge import Knowledge
 from services.agent_orchestrator.application.ports.output.agent_repository import (
     AgentRepository,
 )
-from services.agent_orchestrator.application.domain.agent import Agent
-from services.agent_orchestrator.application.domain.knowledge import Knowledge
 from services.agent_orchestrator.infrastructure.database import (
     AgentModel,
     KnowledgeBaseModel,
 )
+from sqlalchemy.orm import Session
 
 
 class PostgresAgentRepository(AgentRepository):
@@ -22,7 +22,7 @@ class PostgresAgentRepository(AgentRepository):
             self.db.query(AgentModel).filter(AgentModel.id == agent_id).first()
         )
         if agent_model:
-            return Agent.from_attributes(agent_model)
+            return Agent.model_validate(agent_model, from_attributes=True)
         return None
 
     def find_relevant_knowledge(
@@ -43,4 +43,7 @@ class PostgresAgentRepository(AgentRepository):
             .all()
         )
 
-        return [Knowledge.from_attributes(model) for model in knowledge_models]
+        return [
+            Knowledge.model_validate(model, from_attributes=True)
+            for model in knowledge_models
+        ]

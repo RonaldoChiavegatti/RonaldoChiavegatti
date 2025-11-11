@@ -1,26 +1,27 @@
-import unittest
-from unittest.mock import MagicMock
-import uuid
 import sys
+import unittest
+import uuid
+from datetime import datetime, timezone
 from pathlib import Path
+from unittest.mock import MagicMock
 
 # Add the project root to the system path to allow imports from services
 project_root = Path(__file__).parent.parent.parent
 sys.path.insert(0, str(project_root))
 
-from services.auth_service.application.services.user_service_impl import UserServiceImpl
 from services.auth_service.application.domain.user import User as DomainUser
 from services.auth_service.application.exceptions import (
-    UserAlreadyExistsError,
     InvalidCredentialsError,
-)
-from services.auth_service.application.ports.output.user_repository import (
-    UserRepository,
+    UserAlreadyExistsError,
 )
 from services.auth_service.application.ports.output.password_hasher import (
     PasswordHasher,
 )
 from services.auth_service.application.ports.output.token_provider import TokenProvider
+from services.auth_service.application.ports.output.user_repository import (
+    UserRepository,
+)
+from services.auth_service.application.services.user_service_impl import UserServiceImpl
 
 
 class TestUserService(unittest.TestCase):
@@ -38,11 +39,14 @@ class TestUserService(unittest.TestCase):
         )
 
         # Common test data
+        timestamp = datetime.now(timezone.utc)
         self.test_user_domain = DomainUser(
             id=uuid.uuid4(),
             full_name="Test User",
             email="test@example.com",
             hashed_password="hashed_password",
+            created_at=timestamp,
+            updated_at=timestamp,
         )
 
     def test_register_user_success(self):
