@@ -1,0 +1,141 @@
+version: "3.8"
+
+services:
+  postgres:
+    image: postgres:13
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      POSTGRES_DB_AUTH: ${POSTGRES_DB_AUTH}
+      POSTGRES_DB_DOCUMENTS: ${POSTGRES_DB_DOCUMENTS}
+      POSTGRES_DB_ORCHESTRATOR: ${POSTGRES_DB_ORCHESTRATOR}
+      POSTGRES_DB_BILLING: ${POSTGRES_DB_BILLING}
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+      - ./init-db.sh:/docker-entrypoint-initdb.d/init-db.sh
+      - ../shared/database/database_schemas.sql:/docker-entrypoint-initdb.d/init.sql
+    ports:
+      - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  redis:
+    image: redis:6-alpine
+    ports:
+      - "6379:6379"
+
+  minio:
+    image: minio/minio
+    command: server /data --console-address ":9001"
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+    volumes:
+      - minio_data:/data
+    ports:
+      - "9000:9000"
+      - "9001:9001"
+
+  auth-service:
+    build:
+      context: ..
+      dockerfile: services/auth_service/Dockerfile
+    ports:
+      - "8001:8001"
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB_AUTH}"
+      SECRET_KEY: ${SECRET_KEY}
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  document-service:
+    build:
+      context: ..
+      dockerfile: services/document_service/Dockerfile
+    ports:
+      - "8003:8003"
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB_DOCUMENTS}"
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      REDIS_URL: ${REDIS_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  document-worker:
+    build:
+      context: ..
+      dockerfile: services/document_service/worker.Dockerfile
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB_DOCUMENTS}"
+      MINIO_ENDPOINT: ${MINIO_ENDPOINT}
+      MINIO_ACCESS_KEY: ${MINIO_ACCESS_KEY}
+      MINIO_SECRET_KEY: ${MINIO_SECRET_KEY}
+      REDIS_URL: ${REDIS_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  agent-orchestrator:
+    build:
+      context: ..
+      dockerfile: services/agent_orchestrator/Dockerfile
+    ports:
+      - "8002:8002"
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB_ORCHESTRATOR}"
+      GEMINI_API_KEY: ${GEMINI_API_KEY}
+      BILLING_SERVICE_URL: ${BILLING_SERVICE_URL}
+    depends_on:
+      postgres:
+        condition: service_healthy
+      billing-service:
+        condition: service_started
+
+  billing-service:
+    build:
+      context: ..
+      dockerfile: services/billing_service/Dockerfile
+    ports:
+      - "8004:8004"
+    environment:
+      DATABASE_URL: "postgresql://${POSTGRES_USER}:${POSTGRES_PASSWORD}@postgres:5432/${POSTGRES_DB_BILLING}"
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  api-gateway:
+    image: nginx:1.19-alpine
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf:ro
+    ports:
+      - "80:80"
+    restart: always
+    depends_on:
+      auth-service:
+        condition: service_started
+      document-service:
+        condition: service_started
+      agent-orchestrator:
+        condition: service_started
+      billing-service:
+        condition: service_started
+
+volumes:
+  postgres_data:
+  minio_data:
