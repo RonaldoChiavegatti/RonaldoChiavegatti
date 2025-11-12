@@ -7,6 +7,7 @@ from dataclasses import dataclass, field
 from typing import Dict, Iterable, Optional
 from uuid import UUID
 
+import re
 import unicodedata
 
 from app.services.repositories import DocumentRepository
@@ -138,8 +139,10 @@ class FinancialSummaryBuilder:
                                 values.append(amount)
                         continue
 
-                    # Recurse into nested payloads, keeping the first matching key
-                    visit(value, active_context)
+                    if key_matches or next_context:
+                        amount = _coerce_amount(value)
+                        if amount is not None:
+                            values.append(amount)
                 return
 
             if is_container(node):
@@ -149,15 +152,33 @@ class FinancialSummaryBuilder:
                         continue
 
                     amount = _coerce_amount(item)
-                    if amount is not None and (context_key is None or has_target(context_key)):
+                    if amount is not None and (
+                        context_key is None
+                        or (
+                            has_target(context_key)
+                            and not _is_identifier_like(None, item)
+                        )
+                    ):
+                    if amount is not None and has_target_context:
                         values.append(amount)
                 return
 
             amount = _coerce_amount(node)
-            if amount is not None and (context_key is None or has_target(context_key)):
+            if amount is not None and (
+                context_key is None
+                or (
+                    has_target(context_key)
+                    and not _is_identifier_like(None, node)
+                )
+            ):
+            if amount is not None and has_target_context:
                 values.append(amount)
 
         visit(payload)
+        if not values:
+            fallback_amount = _coerce_amount(payload)
+            if fallback_amount is not None:
+                values.append(fallback_amount)
         return values
 
     def _extract_mei_payload(self, payload: object) -> Dict[str, float]:
@@ -202,3 +223,41 @@ def _coerce_amount(value: object) -> Optional[float]:
         except ValueError:
             return None
     return None
+
+
+def _contains_token(text: str, token: str) -> bool:
+    """Return True if the token appears as a whole word within the text."""
+
+    pattern = rf"(?:^|[^a-z0-9]){re.escape(token)}(?:[^a-z0-9]|$)"
+    return re.search(pattern, text) is not None
+
+
+def _is_identifier_like(key: Optional[str], value: object) -> bool:
+    """Heuristics to detect metadata fields that should not be treated as amounts."""
+
+    if key:
+        normalized_key = key.lower()
+        substring_exclusions = {
+            "chave",
+            "metadata",
+            "metadado",
+            "identificador",
+            "identificacao",
+            "codigo",
+            "cod",
+            "numero",
+            "num",
+        }
+
+        if any(fragment in normalized_key for fragment in substring_exclusions):
+            return True
+
+        if _contains_token(normalized_key, "id"):
+            return True
+
+    if isinstance(value, str):
+        digits_only = value.strip().replace(" ", "")
+        if digits_only.isdigit() and len(digits_only) >= 8:
+            return True
+
+    return False
