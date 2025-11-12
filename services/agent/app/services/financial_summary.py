@@ -125,11 +125,18 @@ class FinancialSummaryBuilder:
                     active_context = normalized_key if key_matches else context_key
 
                     if not isinstance(value, (dict, list, tuple, set)):
-                        if key_matches or (
-                            active_context is not None
-                            and has_target(active_context)
-                            and not _is_identifier_like(normalized_key, value)
-                        ):
+                        should_use_value = False
+
+                        if key_matches:
+                            should_use_value = not _is_identifier_like(
+                                normalized_key, value
+                            )
+                        elif active_context is not None and has_target(active_context):
+                            should_use_value = not _is_identifier_like(
+                                normalized_key, value
+                            )
+
+                        if should_use_value:
                             amount = _coerce_amount(value)
                             if amount is not None:
                                 values.append(amount)
