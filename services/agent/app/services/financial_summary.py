@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence, Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, Optional
 from uuid import UUID
@@ -113,17 +114,22 @@ class FinancialSummaryBuilder:
                 return False
             return any(fragment in text for fragment in target_fragments)
 
+        def is_container(node: object) -> bool:
+            if isinstance(node, (str, bytes, bytearray)):
+                return False
+            return isinstance(node, (Mapping, Sequence, AbstractSet))
+
         def visit(node: object, context_key: Optional[str] = None) -> None:
             if node is None:
                 return
 
-            if isinstance(node, dict):
+            if isinstance(node, Mapping):
                 for key, value in node.items():
                     normalized_key = _normalize_key(str(key))
                     key_matches = has_target(normalized_key)
                     active_context = normalized_key if key_matches else context_key
 
-                    if not isinstance(value, (dict, list, tuple, set)):
+                    if not is_container(value):
                         if key_matches or (
                             active_context is not None and has_target(active_context)
                         ):
@@ -136,9 +142,9 @@ class FinancialSummaryBuilder:
                     visit(value, active_context)
                 return
 
-            if isinstance(node, (list, tuple, set)):
+            if is_container(node):
                 for item in node:
-                    if isinstance(item, (dict, list, tuple, set)):
+                    if is_container(item):
                         visit(item, context_key)
                         continue
 
