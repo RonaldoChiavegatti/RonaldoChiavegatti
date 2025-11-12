@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from collections.abc import Mapping, Sequence
+from collections.abc import Mapping, Sequence, Set as AbstractSet
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, Optional
 from uuid import UUID
@@ -116,15 +116,11 @@ class FinancialSummaryBuilder:
             return any(fragment in text for fragment in target_fragments)
 
         def is_container(node: object) -> bool:
-            if isinstance(node, Mapping):
-                return True
-            if isinstance(node, set):
-                return True
-            return isinstance(node, Sequence) and not isinstance(
-                node, (str, bytes, bytearray)
-            )
+            if isinstance(node, (str, bytes, bytearray)):
+                return False
+            return isinstance(node, (Mapping, Sequence, AbstractSet))
 
-        def visit(node: object, has_target_context: bool = False) -> None:
+        def visit(node: object, context_key: Optional[str] = None) -> None:
             if node is None:
                 return
 
@@ -134,20 +130,10 @@ class FinancialSummaryBuilder:
                     key_matches = has_target(normalized_key)
                     active_context = normalized_key if key_matches else context_key
 
-                    if not isinstance(value, (dict, list, tuple, set)):
-                        if key_matches or (context_key and has_target(context_key)):
-                        should_use_value = False
-
-                        if key_matches:
-                            should_use_value = not _is_identifier_like(
-                                normalized_key, value
-                            )
-                        elif active_context is not None and has_target(active_context):
-                            should_use_value = not _is_identifier_like(
-                                normalized_key, value
-                            )
-
-                        if should_use_value:
+                    if not is_container(value):
+                        if key_matches or (
+                            active_context is not None and has_target(active_context)
+                        ):
                             amount = _coerce_amount(value)
                             if amount is not None:
                                 values.append(amount)
@@ -159,12 +145,10 @@ class FinancialSummaryBuilder:
                             values.append(amount)
                 return
 
-            if isinstance(node, set) or (
-                isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray))
-            ):
+            if is_container(node):
                 for item in node:
                     if is_container(item):
-                        visit(item, has_target_context)
+                        visit(item, context_key)
                         continue
 
                     amount = _coerce_amount(item)

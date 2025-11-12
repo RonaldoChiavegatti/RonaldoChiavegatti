@@ -60,6 +60,21 @@ class FinancialSummaryBuilderTestCase(unittest.TestCase):
         self.assertIn("NOTA_FISCAL_EMITIDA", summary.revenues.breakdown)
         self.assertIn("DESPESA_DEDUTIVEL", summary.expenses.breakdown)
 
+    def test_extracts_nested_amounts_in_complex_payloads(self):
+        nested_payload = {
+            "itens": [
+                {"detalhes": {"valor_unitario": "100,00"}},
+                {"parcelas": [{"montante": 200}]},
+            ],
+            "resumo": [
+                {"valores": {"quantia": "50,00"}},
+                {"subtotais": [{"total_liquido": 25}]},
+            ],
+        }
+        records = [
+            DocumentRecord(
+                document_type="NOTA_FISCAL_EMITIDA",
+                extracted_data=nested_payload,
     def test_extract_values_from_nested_payloads(self):
         records = [
             DocumentRecord(
@@ -81,6 +96,11 @@ class FinancialSummaryBuilderTestCase(unittest.TestCase):
 
         summary = builder.build_summary(self.user_id)
 
+        self.assertAlmostEqual(summary.revenues.total, 100.0 + 200.0 + 50.0 + 25.0)
+        self.assertEqual(
+            summary.revenues.breakdown["NOTA_FISCAL_EMITIDA"],
+            100.0 + 200.0 + 50.0 + 25.0,
+        )
         expected_total = 1200.0 + 300.0 + 150.25 + 50.0 + 99.75
         self.assertAlmostEqual(summary.revenues.total, expected_total)
         self.assertEqual(summary.expenses.total, 0.0)
