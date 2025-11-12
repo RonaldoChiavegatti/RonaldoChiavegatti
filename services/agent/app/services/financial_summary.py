@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from collections.abc import Mapping, Sequence
 from dataclasses import dataclass, field
 from typing import Dict, Iterable, Optional
 from uuid import UUID
@@ -114,11 +115,20 @@ class FinancialSummaryBuilder:
                 return False
             return any(fragment in text for fragment in target_fragments)
 
-        def visit(node: object, context_key: Optional[str] = None) -> None:
+        def is_container(node: object) -> bool:
+            if isinstance(node, Mapping):
+                return True
+            if isinstance(node, set):
+                return True
+            return isinstance(node, Sequence) and not isinstance(
+                node, (str, bytes, bytearray)
+            )
+
+        def visit(node: object, has_target_context: bool = False) -> None:
             if node is None:
                 return
 
-            if isinstance(node, dict):
+            if isinstance(node, Mapping):
                 for key, value in node.items():
                     normalized_key = _normalize_key(str(key))
                     key_matches = has_target(normalized_key)
@@ -142,14 +152,18 @@ class FinancialSummaryBuilder:
                                 values.append(amount)
                         continue
 
-                    # Recurse into nested payloads, keeping the first matching key
-                    visit(value, active_context)
+                    if key_matches or next_context:
+                        amount = _coerce_amount(value)
+                        if amount is not None:
+                            values.append(amount)
                 return
 
-            if isinstance(node, (list, tuple, set)):
+            if isinstance(node, set) or (
+                isinstance(node, Sequence) and not isinstance(node, (str, bytes, bytearray))
+            ):
                 for item in node:
-                    if isinstance(item, (dict, list, tuple, set)):
-                        visit(item, context_key)
+                    if is_container(item):
+                        visit(item, has_target_context)
                         continue
 
                     amount = _coerce_amount(item)
@@ -160,6 +174,7 @@ class FinancialSummaryBuilder:
                             and not _is_identifier_like(None, item)
                         )
                     ):
+                    if amount is not None and has_target_context:
                         values.append(amount)
                 return
 
@@ -171,9 +186,14 @@ class FinancialSummaryBuilder:
                     and not _is_identifier_like(None, node)
                 )
             ):
+            if amount is not None and has_target_context:
                 values.append(amount)
 
         visit(payload)
+        if not values:
+            fallback_amount = _coerce_amount(payload)
+            if fallback_amount is not None:
+                values.append(fallback_amount)
         return values
 
     def _extract_mei_payload(self, payload: object) -> Dict[str, float]:
