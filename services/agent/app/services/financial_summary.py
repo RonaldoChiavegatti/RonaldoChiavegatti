@@ -135,6 +135,7 @@ class FinancialSummaryBuilder:
                     active_context = normalized_key if key_matches else context_key
 
                     if not isinstance(value, (dict, list, tuple, set)):
+                        if key_matches or (context_key and has_target(context_key)):
                         should_use_value = False
 
                         if key_matches:
