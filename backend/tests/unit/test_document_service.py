@@ -585,6 +585,87 @@ class TestDocumentService(unittest.TestCase):
         self.assertIn(
             "Notas fiscais emitidas", summary.documentos_considerados
         )
+        self.assertNotIn(
+            "Em 01/2024, você faturou além da média mensal, mas seu total anual ainda está dentro do limite do MEI.",
+            summary.observacoes,
+        )
+
+    def test_get_monthly_revenue_summary_includes_flexibility_alert(self):
+        high_month_revenue_job = DocumentJob(
+            id=uuid.uuid4(),
+            user_id=self.user_id,
+            file_path="/tmp/nf_jan.pdf",
+            document_type=DocumentType.NOTA_FISCAL_EMITIDA,
+            status=ProcessingStatus.COMPLETED,
+            extracted_data={"valor": 7000.0, "data": "2024-01-10"},
+            created_at=datetime(2024, 1, 15),
+        )
+
+        other_month_job = DocumentJob(
+            id=uuid.uuid4(),
+            user_id=self.user_id,
+            file_path="/tmp/nf_fev.pdf",
+            document_type=DocumentType.NOTA_FISCAL_EMITIDA,
+            status=ProcessingStatus.COMPLETED,
+            extracted_data={"valor": 1000.0, "data": "2024-02-10"},
+            created_at=datetime(2024, 2, 15),
+        )
+
+        self.mock_job_repo.get_by_user_id.return_value = [
+            high_month_revenue_job,
+            other_month_job,
+        ]
+
+        summary = self.doc_service.get_monthly_revenue_summary(
+            user_id=self.user_id, year=2024, month=1
+        )
+
+        self.assertIn(
+            "Em 01/2024, você faturou além da média mensal, mas seu total anual ainda está dentro do limite do MEI.",
+            summary.observacoes,
+        )
+
+    def test_get_monthly_revenue_summary_omits_alert_when_annual_limit_surpassed(self):
+        january_job = DocumentJob(
+            id=uuid.uuid4(),
+            user_id=self.user_id,
+            file_path="/tmp/nf_jan.pdf",
+            document_type=DocumentType.NOTA_FISCAL_EMITIDA,
+            status=ProcessingStatus.COMPLETED,
+            extracted_data={"valor": 7000.0, "data": "2024-01-10"},
+            created_at=datetime(2024, 1, 15),
+        )
+
+        # Generate enough revenue in other months to exceed the annual limit
+        other_months_jobs = [
+            DocumentJob(
+                id=uuid.uuid4(),
+                user_id=self.user_id,
+                file_path=f"/tmp/nf_{month:02d}.pdf",
+                document_type=DocumentType.NOTA_FISCAL_EMITIDA,
+                status=ProcessingStatus.COMPLETED,
+                extracted_data={
+                    "valor": 7500.0,
+                    "data": f"2024-{month:02d}-10",
+                },
+                created_at=datetime(2024, month, 15),
+            )
+            for month in range(2, 12)
+        ]
+
+        self.mock_job_repo.get_by_user_id.return_value = [
+            january_job,
+            *other_months_jobs,
+        ]
+
+        summary = self.doc_service.get_monthly_revenue_summary(
+            user_id=self.user_id, year=2024, month=1
+        )
+
+        self.assertNotIn(
+            "Em 01/2024, você faturou além da média mensal, mas seu total anual ainda está dentro do limite do MEI.",
+            summary.observacoes,
+        )
 
 
 if __name__ == "__main__":
