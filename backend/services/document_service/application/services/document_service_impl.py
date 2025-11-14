@@ -302,6 +302,7 @@ class DocumentServiceImpl(DocumentService):
             lambda: {"label": "", "total": 0.0, "documents": []}
         )
         total_revenue = 0.0
+        annual_revenue = 0.0
         considered_labels: set[str] = set()
 
         for job in jobs:
@@ -314,55 +315,38 @@ class DocumentServiceImpl(DocumentService):
                 continue
 
             document_year, document_month = document_date
-            if document_year != target_year or document_month != target_month:
-                continue
+            amount: Optional[float] = None
+            breakdown_key: Optional[str] = None
 
             if job.document_type == DocumentType.NOTA_FISCAL_EMITIDA:
                 amount = details.valor
-                if amount is None:
-                    continue
-                total_revenue += amount
-                self._register_breakdown(
-                    breakdown_data,
-                    DocumentType.NOTA_FISCAL_EMITIDA.value,
-                    amount,
-                    job.id,
-                )
-                considered_labels.add(
-                    self._BREAKDOWN_LABELS[DocumentType.NOTA_FISCAL_EMITIDA.value]
-                )
-                continue
-
-            if job.document_type == DocumentType.INFORME_RENDIMENTOS:
+                breakdown_key = DocumentType.NOTA_FISCAL_EMITIDA.value
+            elif job.document_type == DocumentType.INFORME_RENDIMENTOS:
                 if not self._is_operational_revenue(job, details):
                     continue
                 amount = details.valor
-                if amount is None:
-                    continue
-                total_revenue += amount
-                self._register_breakdown(
-                    breakdown_data,
-                    DocumentType.INFORME_RENDIMENTOS.value,
-                    amount,
-                    job.id,
-                )
-                considered_labels.add(
-                    self._BREAKDOWN_LABELS[DocumentType.INFORME_RENDIMENTOS.value]
-                )
+                breakdown_key = DocumentType.INFORME_RENDIMENTOS.value
+            elif job.document_type == DocumentType.DASN_SIMEI:
+                amount = self._extract_lucro_tributavel(details, job)
+                breakdown_key = "LUCRO_TRIBUTAVEL_DASN"
+
+            if amount is None or breakdown_key is None:
                 continue
 
-            if job.document_type == DocumentType.DASN_SIMEI:
-                amount = self._extract_lucro_tributavel(details, job)
-                if amount is None:
-                    continue
-                total_revenue += amount
-                self._register_breakdown(
-                    breakdown_data,
-                    "LUCRO_TRIBUTAVEL_DASN",
-                    amount,
-                    job.id,
-                )
-                considered_labels.add(self._BREAKDOWN_LABELS["LUCRO_TRIBUTAVEL_DASN"])
+            if document_year == target_year:
+                annual_revenue += amount
+
+            if document_year != target_year or document_month != target_month:
+                continue
+
+            total_revenue += amount
+            self._register_breakdown(
+                breakdown_data,
+                breakdown_key,
+                amount,
+                job.id,
+            )
+            considered_labels.add(self._BREAKDOWN_LABELS[breakdown_key])
 
         breakdown_models: Dict[str, AnnualRevenueSourceBreakdown] = {}
         for key, payload in breakdown_data.items():
@@ -393,6 +377,15 @@ class DocumentServiceImpl(DocumentService):
                 "permaneça dentro do teto de R$ 81.000,00."
             )
         ]
+
+        annual_revenue = round(annual_revenue, 2)
+        if total_revenue > self._MONTHLY_LIMIT and annual_revenue <= self._ANNUAL_LIMIT:
+            notes.append(
+                (
+                    "Em {month_label}, você faturou além da média mensal, mas seu total "
+                    "anual ainda está dentro do limite do MEI."
+                ).format(month_label=month_label)
+            )
 
         return MonthlyRevenueSummaryResponse(
             mes=target_month,
