@@ -5,6 +5,7 @@ from __future__ import annotations
 import logging
 import threading
 from datetime import datetime, timezone
+from queue import Full, Queue
 from typing import Callable, List, Optional, Tuple
 from uuid import UUID
 
@@ -24,6 +25,39 @@ from app.services.repositories import (
 
 
 logger = logging.getLogger(__name__)
+
+
+_BILLING_QUEUE_MAXSIZE = 512
+_BILLING_TASK_QUEUE: Queue[Callable[[], None]] = Queue(maxsize=_BILLING_QUEUE_MAXSIZE)
+_BILLING_WORKER_LOCK = threading.Lock()
+_BILLING_WORKER_THREAD: threading.Thread | None = None
+
+
+def _billing_worker() -> None:
+    while True:
+        task = _BILLING_TASK_QUEUE.get()
+        try:
+            task()
+        except Exception:  # pragma: no cover - defensive guard
+            logger.warning(
+                "Unhandled error while processing billing task", exc_info=True
+            )
+        finally:
+            _BILLING_TASK_QUEUE.task_done()
+
+
+def _ensure_billing_worker_started() -> None:
+    global _BILLING_WORKER_THREAD
+    if _BILLING_WORKER_THREAD is not None and _BILLING_WORKER_THREAD.is_alive():
+        return
+
+    with _BILLING_WORKER_LOCK:
+        if _BILLING_WORKER_THREAD is not None and _BILLING_WORKER_THREAD.is_alive():
+            return
+
+        worker = threading.Thread(target=_billing_worker, name="billing-logger", daemon=True)
+        worker.start()
+        _BILLING_WORKER_THREAD = worker
 
 
 class AgentChatService:
@@ -373,5 +407,10 @@ class AgentChatService:
 
     @staticmethod
     def _spawn_billing_task(task: Callable[[], None]) -> None:
-        thread = threading.Thread(target=task, name="billing-logger", daemon=True)
-        thread.start()
+        _ensure_billing_worker_started()
+        try:
+            _BILLING_TASK_QUEUE.put_nowait(task)
+        except Full:
+            logger.warning(
+                "Skipping billing usage logging because the dispatch queue is full"
+            )
